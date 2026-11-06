@@ -5,7 +5,7 @@ description: 查询和下载 Esri World Imagery Wayback 历史影像，按区域
 
 # Esri Wayback 历史影像下载
 
-使用 Esri 发布目录和 WMTS 瓦片服务，按指定范围生成有坐标、掩膜与来源记录的 RGB GeoTIFF。操作细节和本项目实现入口见 [references/project-workflow.md](references/project-workflow.md)，首次实施、迁移脚本或处理缺块时阅读。
+使用 Esri 发布目录和 WMTS 瓦片服务，按指定范围生成有坐标、掩膜与来源记录的 RGB GeoTIFF。平台配置见 [references/platforms.md](references/platforms.md)；详细实现参考见 [references/project-workflow.md](references/project-workflow.md)，首次实施、迁移脚本或处理缺块时阅读。
 
 ## 先确定时间含义与交付范围
 
@@ -26,14 +26,14 @@ description: 查询和下载 Esri World Imagery Wayback 历史影像，按区域
 - 读取区域原始 CRS，检查几何并合并多部件，转 EPSG:3857；保持传统 GIS 的 XY 轴序。
 - 按 256 像素、左上角起算的瓦片行列规划，筛选与真实区域相交的瓦片。WMTS 模板通常为 `.../tile/{release}/{level}/{row}/{col}`；优先使用目录 `itemURL`。
 - 固化计划，记录区域、档期、级别、URL、网格、分块、输出参数与总数。恢复前确认这些参数一致；缓存路径隔离发布 ID 和级别。
-- PowerShell 7 通过 `Invoke-WebRequest` 下载，复用 WebRequestSession，显式配置直连或用户指定代理；Referer 使用 `https://livingatlas.arcgis.com/wayback/`。先小范围试跑，再依据成功率逐步调节并发。
+- 优先使用 Python 3 的 requests.Session 或 urllib 下载；也可使用运行环境已有的 HTTP 客户端。复用连接，显式配置直连或用户指定代理；Referer 使用 `https://livingatlas.arcgis.com/wayback/`。先小范围试跑，再依据成功率逐步调节并发。
 - 写入临时文件，检查响应格式并解码核实 256×256、RGB 可读，成功后更名。已有缓存同样检查。HTTP 成功状态单独不足以证明瓦片有效。
-- 传输失败设置有限次数退避；403/429 持续出现时保存状态并暂停，保留恢复入口；404 有限复核后记录坐标、版本、URL 和时间，继续可完成部分。遇到 ACL 阻拦保留现状，通过 PowerShell 在获准位置工作。
+- 传输失败设置有限次数退避；403/429 持续出现时保存状态并暂停，保留恢复入口；404 有限复核后记录坐标、版本、URL 和时间，继续可完成部分。遇到权限限制时保留现有设置，在获准的可写目录工作。
 - 使用单任务锁、原子状态更新、STOP 标记和完成分块记录。恢复时读取计划与已校验分块，避免重复下载或多个进程写同一目录。
 
 ## 分块拼接与交付
 
-1. 本项目按 16×16 瓦片网格组织分块，写带坐标的 VRT，再转无损 ZSTD 或 LZW 分块 TIFF；完成校验后才标记分块完成。
+1. 可按 16×16 瓦片网格组织分块，并依据可用内存调整，写带坐标的 VRT，再转无损 ZSTD 或 LZW 分块 TIFF；完成校验后才标记分块完成。
 2. 汇总分块 VRT，用原始边界裁剪，保持目标网格对齐。目标为原瓦片网格时可用 nearest，投影转换按用途选择重采样。
 3. 用裁剪 alpha 生成内部有效区掩膜，缺失瓦片也设无效。保留合法零值像素；仅设置 RGB NoData 元组无法表达全部有效区信息。
 4. 展示交付可用 TILED、JPEG 质量 85、YCBCR、512 像素块和 BigTIFF；需要保留像素时使用无损压缩。JPEG 输出记录二次有损压缩。
