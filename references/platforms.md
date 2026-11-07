@@ -36,3 +36,20 @@ gdalinfo --version
 对用户区域的一小块先完成目录解析、至少一块瓦片下载与解码、地理定位、GeoTIFF 输出与窗口读取，再扩大范围。若筛选拍摄年份，另验证元数据分页与等积面积统计。保存服务快照与运行版本；网络和服务访问仍取决于实际环境。
 
 官方入口：[Wayback](https://livingatlas.arcgis.com/wayback/)；[发布目录](https://s3-us-west-2.amazonaws.com/config.maptiles.arcgis.com/waybackconfig.json)；[GDAL](https://gdal.org/)；[Rasterio](https://rasterio.readthedocs.io/)。
+
+## Automated setup and verification
+
+Run `python scripts/setup.py` from a full checkout (macOS: `python3`; Windows:
+`py -3` when needed). Requires Python 3.10+, internet access, and permission to
+write the selected environment. It creates an isolated environment, obtains a
+current Mozilla CA bundle over system-validated HTTPS when curl is available,
+installs binary Python wheels, and verifies real GeoTIFF write/read behavior.
+No system Python or system CA configuration is changed. Explicit trusted CA:
+`--ca-bundle PATH`. Dry run: `--plan`.
+
+Read local-runtime.json for actual paths after setup. Never commit or migrate
+that file or the virtual environment. Use a normal local terminal for native
+installation; restricted agent environments may prevent macOS DMG mounting.
+No command disables Gatekeeper, TLS verification, or operating-system security.
+The Windows/macOS CI matrix checks native installation and repeat setup;
+online imagery coverage and service access still require a bounded live test.

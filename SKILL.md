@@ -44,3 +44,12 @@ description: 查询和下载 Esri World Imagery Wayback 历史影像，按区域
 ## 完成说明
 
 返回最终路径、使用档期和时间含义、目标级别与像素分辨率、下载/缺失数量、恢复状态、实际检查项目及限制。只完成元数据查询时，明确影像下载状态。
+
+## Automated Windows/macOS setup
+
+For a fresh installation run `python scripts/setup.py` (macOS often `python3`,
+Windows optionally `py -3`). Read generated `local-runtime.json` for the verified
+Python and native client paths. Keep `.venv`, `.runtime` and local-runtime.json
+local to this machine. Do not copy paths or credentials from another computer.
+The setup verifies real GeoTIFF IO and the optional native client's help; follow
+with a bounded online availability/download check before claiming data access.
