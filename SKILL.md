@@ -1,0 +1,55 @@
+---
+name: esri-wayback-download
+description: 查询和下载 Esri World Imagery Wayback 历史影像，按区域与发布档期规划瓦片、断点续传、拼接裁剪 GeoTIFF，并核查拍摄日期覆盖率和缺失瓦片。适用于 Wayback 数据下载与多期历史底图交付。
+---
+
+# Esri Wayback 历史影像下载
+
+使用 Esri 发布目录和 WMTS 瓦片服务，按指定范围生成有坐标、掩膜与来源记录的 RGB GeoTIFF。平台配置见 [references/platforms.md](references/platforms.md)；详细实现参考见 [references/project-workflow.md](references/project-workflow.md)，首次实施、迁移脚本或处理缺块时阅读。
+
+## 先确定时间含义与交付范围
+
+- 确定区域文件及 CRS、发布日期或拍摄年份要求、缩放级别、输出坐标系、输出目录、允许的缺失率和压缩方式。可从任务材料推断的参数直接使用。
+- Wayback 发布日期表示底图版本时间；同一版本区域内可有多个拍摄日期。拍摄年份要求通过元数据覆盖率核验；文件名中的年份单独记录其含义。
+- Esri Wayback 与 Google Earth 历史影像分别保留来源。跨发布档期补洞或更换影像来源，需要用户任务范围支持，并记录每块实际来源。
+- 展示瓦片为渲染 RGB，分析其用途时说明波段、辐射定标和原始传感器数据的差异。保留 Esri 与供应商署名及适用使用条款。
+
+## 选择发布版本
+
+- 获取官方目录 `https://s3-us-west-2.amazonaws.com/config.maptiles.arcgis.com/waybackconfig.json`，保存获取时间及原始快照。失败时可读缓存并说明缓存时间。
+- 从键取得发布 ID，从 `itemTitle` 解析发布日期，保留 `itemURL` 与 `metadataLayerUrl`。按日期排序，避免按发布 ID 推断时间。目录与服务结构使用时重新核验。
+- 对候选档期抽样目标级别瓦片，确认可下载且能解码；按点位或分块查询 tilemap 可减少重复版本下载。点位结果只代表采样位置。
+- 若按拍摄年份交付，查询元数据斑块，按级别筛选，分页完整取回后在本地裁剪原始边界，用等积投影统计。分别报告目标年份、未知日期与跨年份重叠区域；根据覆盖率选版本。
+
+## 规划与下载
+
+- 读取区域原始 CRS，检查几何并合并多部件，转 EPSG:3857；保持传统 GIS 的 XY 轴序。
+- 按 256 像素、左上角起算的瓦片行列规划，筛选与真实区域相交的瓦片。WMTS 模板通常为 `.../tile/{release}/{level}/{row}/{col}`；优先使用目录 `itemURL`。
+- 固化计划，记录区域、档期、级别、URL、网格、分块、输出参数与总数。恢复前确认这些参数一致；缓存路径隔离发布 ID 和级别。
+- 优先使用 Python 3 的 requests.Session 或 urllib 下载；也可使用运行环境已有的 HTTP 客户端。复用连接，显式配置直连或用户指定代理；Referer 使用 `https://livingatlas.arcgis.com/wayback/`。先小范围试跑，再依据成功率逐步调节并发。
+- 写入临时文件，检查响应格式并解码核实 256×256、RGB 可读，成功后更名。已有缓存同样检查。HTTP 成功状态单独不足以证明瓦片有效。
+- 传输失败设置有限次数退避；403/429 持续出现时保存状态并暂停，保留恢复入口；404 有限复核后记录坐标、版本、URL 和时间，继续可完成部分。遇到权限限制时保留现有设置，在获准的可写目录工作。
+- 使用单任务锁、原子状态更新、STOP 标记和完成分块记录。恢复时读取计划与已校验分块，避免重复下载或多个进程写同一目录。
+
+## 分块拼接与交付
+
+- 可按 16×16 瓦片网格组织分块，并依据可用内存调整，写带坐标的 VRT，再转无损 ZSTD 或 LZW 分块 TIFF；完成校验后才标记分块完成。
+- 汇总分块 VRT，用原始边界裁剪，保持目标网格对齐。目标为原瓦片网格时可用 nearest，投影转换按用途选择重采样。
+- 用裁剪 alpha 生成内部有效区掩膜，缺失瓦片也设无效。保留合法零值像素；仅设置 RGB NoData 元组无法表达全部有效区信息。
+- 展示交付可用 TILED、JPEG 质量 85、YCBCR、512 像素块和 BigTIFF；需要保留像素时使用无损压缩。JPEG 输出记录二次有损压缩。
+- 临时最终文件通过检查后更名，已有交付文件保留。记录发布 ID/日期、拍摄日期证据、级别、CRS、缺块清单、补洞来源和压缩参数。
+- 核验尺寸、波段、CRS、仿射变换、分辨率、内部掩膜，以及分散窗口读取；检查缺块中心为无效、边界外为无效、边界内正常区域可读。生成预览检查接缝与错位，区分抽样检查和全量验证。
+- 区分完整交付与带缺块交付。交付及必要记录确认有效后再清理任务内临时数据，先解析并检查清理绝对路径。
+
+## 完成说明
+
+返回最终路径、使用档期和时间含义、目标级别与像素分辨率、下载/缺失数量、恢复状态、实际检查项目及限制。只完成元数据查询时，明确影像下载状态。
+
+## Automated Windows/macOS setup
+
+For a fresh installation run `python scripts/setup.py` (macOS often `python3`,
+Windows optionally `py -3`). Read generated `local-runtime.json` for the verified
+Python and native client paths. Keep `.venv`, `.runtime` and local-runtime.json
+local to this machine. Do not copy paths or credentials from another computer.
+The setup verifies real GeoTIFF IO and the optional native client's help; follow
+with a bounded online availability/download check before claiming data access.
